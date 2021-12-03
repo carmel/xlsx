@@ -2,8 +2,8 @@ package xlsx
 
 import (
 	"bytes"
-	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,17 +11,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// parseFormatCommentsSet provides a function to parse the format settings of
-// the comment with default value.
-func parseFormatCommentsSet(formatSet string) (*formatComment, error) {
-	format := formatComment{
-		Author: "Author:",
-		Text:   " ",
-	}
-	err := json.Unmarshal([]byte(formatSet), &format)
-	return &format, err
-}
 
 // GetComments retrieves all comments and returns a map of worksheet name to
 // the worksheet comments.
@@ -83,10 +72,12 @@ func (f *File) getSheetComments(sheetFile string) string {
 //
 //    err := f.AddComment("Sheet1", "A30", `{"author":"Excelize: ","text":"This is a comment."}`)
 //
-func (f *File) AddComment(sheet, cell, format string) error {
-	formatSet, err := parseFormatCommentsSet(format)
-	if err != nil {
-		return err
+func (f *File) AddComment(sheet, cell, author, text string) error {
+	if author == "" {
+		author = "Author:"
+	}
+	if text == "" {
+		return errors.New("comment content cannot be empty")
 	}
 	// Read sheet data.
 	ws, err := f.workSheetReader(sheet)
@@ -112,19 +103,19 @@ func (f *File) AddComment(sheet, cell, format string) error {
 	}
 	commentsXML := "xl/comments" + strconv.Itoa(commentID) + ".xml"
 	var colCount int
-	for i, l := range strings.Split(formatSet.Text, "\n") {
+	for i, l := range strings.Split(text, "\n") {
 		if ll := len(l); ll > colCount {
 			if i == 0 {
-				ll += len(formatSet.Author)
+				ll += len(author)
 			}
 			colCount = ll
 		}
 	}
-	err = f.addDrawingVML(commentID, drawingVML, cell, strings.Count(formatSet.Text, "\n")+1, colCount)
+	err = f.addDrawingVML(commentID, drawingVML, cell, strings.Count(text, "\n")+1, colCount)
 	if err != nil {
 		return err
 	}
-	f.addComment(commentsXML, cell, formatSet)
+	f.addComment(commentsXML, cell, author, text)
 	f.addContentTypePart(commentID, "comments")
 	return err
 }
@@ -231,22 +222,20 @@ func (f *File) addDrawingVML(commentID int, drawingVML, cell string, lineCount, 
 
 // addComment provides a function to create chart as xl/comments%d.xml by
 // given cell and format sets.
-func (f *File) addComment(commentsXML, cell string, formatSet *formatComment) {
-	a := formatSet.Author
-	t := formatSet.Text
-	if len(a) > MaxFieldLength {
-		a = a[:MaxFieldLength]
+func (f *File) addComment(commentsXML, cell, author, text string) {
+	if len(author) > MaxFieldLength {
+		author = author[:MaxFieldLength]
 	}
-	if len(t) > 32512 {
-		t = t[:32512]
+	if len(text) > 32512 {
+		text = text[:32512]
 	}
 	comments := f.commentsReader(commentsXML)
 	authorID := 0
 	if comments == nil {
-		comments = &xlsxComments{Authors: xlsxAuthor{Author: []string{formatSet.Author}}}
+		comments = &xlsxComments{Authors: xlsxAuthor{Author: []string{author}}}
 	}
-	if inStrSlice(comments.Authors.Author, formatSet.Author) == -1 {
-		comments.Authors.Author = append(comments.Authors.Author, formatSet.Author)
+	if inStrSlice(comments.Authors.Author, author) == -1 {
+		comments.Authors.Author = append(comments.Authors.Author, author)
 		authorID = len(comments.Authors.Author) - 1
 	}
 	defaultFont := f.GetDefaultFont()
@@ -266,7 +255,7 @@ func (f *File) addComment(commentsXML, cell string, formatSet *formatComment) {
 						RFont:  &attrValString{Val: stringPtr(defaultFont)},
 						Family: &attrValInt{Val: intPtr(2)},
 					},
-					T: &xlsxT{Val: a},
+					T: &xlsxT{Val: author},
 				},
 				{
 					RPr: &xlsxRPr{
@@ -277,7 +266,7 @@ func (f *File) addComment(commentsXML, cell string, formatSet *formatComment) {
 						RFont:  &attrValString{Val: stringPtr(defaultFont)},
 						Family: &attrValInt{Val: intPtr(2)},
 					},
-					T: &xlsxT{Val: t},
+					T: &xlsxT{Val: text},
 				},
 			},
 		},

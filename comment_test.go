@@ -15,19 +15,19 @@ func TestAddComments(t *testing.T) {
 	}
 
 	s := strings.Repeat("c", 32768)
-	assert.NoError(t, f.AddComment("Sheet1", "A30", `{"author":"`+s+`","text":"`+s+`"}`))
-	assert.NoError(t, f.AddComment("Sheet2", "B7", `{"author":"Excelize: ","text":"This is a comment."}`))
+	assert.NoError(t, f.AddComment("Sheet1", "A30", s, s))
+	assert.NoError(t, f.AddComment("Sheet2", "B7", "xlsx: ", "This is a comment."))
 
 	// Test add comment on not exists worksheet.
-	assert.EqualError(t, f.AddComment("SheetN", "B7", `{"author":"Excelize: ","text":"This is a comment."}`), "sheet SheetN is not exist")
+	assert.EqualError(t, f.AddComment("SheetN", "B7", "xlsx: ", "This is a comment."), "sheet SheetN is not exist")
 	// Test add comment on with illegal cell coordinates
-	assert.EqualError(t, f.AddComment("Sheet1", "A", `{"author":"Excelize: ","text":"This is a comment."}`), `cannot convert cell "A" to coordinates: invalid cell name "A"`)
+	assert.EqualError(t, f.AddComment("Sheet1", "A", "xlsx: ", "This is a comment."), `cannot convert cell "A" to coordinates: invalid cell name "A"`)
 	if assert.NoError(t, f.SaveAs(filepath.Join("test", "TestAddComments.xlsx"))) {
 		assert.Len(t, f.GetComments(), 2)
 	}
 
 	f.Comments["xl/comments2.xml"] = nil
-	f.Pkg.Store("xl/comments2.xml", []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>Excelize: </author></authors><commentList><comment ref="B7" authorId="0"><text><t>Excelize: </t></text></comment></commentList></comments>`))
+	f.Pkg.Store("xl/comments2.xml", []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>xlsx: </author></authors><commentList><comment ref="B7" authorId="0"><text><t>xlsx: </t></text></comment></commentList></comments>`))
 	comments := f.GetComments()
 	assert.EqualValues(t, 2, len(comments["Sheet1"]))
 	assert.EqualValues(t, 1, len(comments["Sheet2"]))
